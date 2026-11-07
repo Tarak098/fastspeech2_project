@@ -1,0 +1,24 @@
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Jupyter / Kaggle checkpoints
+.ipynb_checkpoints/
+.virtual_documents/
+
+# Raw audio datasets (keep test audios in Results/)
+English/data/
+Telugu/data/
+*.zip
+*.tar
+*.tar.gz
+
+# OS-specific files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,38 @@
+language: "Telugu"
+dataset:
+  name: "IndicTTS_Telugu"
+  audio_dir: "data/IndicTTS_Telugu/wavs"
+  transcript_path: "data/IndicTTS_Telugu/transcripts.txt"
+  processed_dir: "processed_data/Telugu"
+  train_hours: 5.0
+  val_hours: 1.0
+
+audio:
+  sampling_rate: 22050
+  n_fft: 1024
+  hop_length: 256
+  win_length: 1024
+  n_mels: 80
+  fmin: 0.0
+  fmax: 8000.0
+
+model:
+  vocab_size: 150
+  d_model: 256
+  n_heads: 2
+  d_inner: 1024
+  enc_layers: 4
+  dec_layers: 4
+  dropout: 0.1
+  conv_filter_size: 256
+
+train:
+  batch_size: 32
+  epochs: 30
+  learning_rate: 0.001
+  warmup_steps: 1000
+  checkpoint_interval: 5
+  log_interval: 50
+  checkpoint_dir: "checkpoints"
+  results_dir: "../Results/Telugu"
+
