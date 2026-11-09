@@ -140,9 +140,21 @@ def main():
     if ckpt_path and os.path.exists(ckpt_path):
         print(f"Loading checkpoint: {ckpt_path}")
         try:
-            state_dict = torch.load(ckpt_path, map_location=device)
-            model.load_state_dict(state_dict)
-            print("[*] Successfully loaded checkpoint weights.")
+            try:
+                state_dict = torch.load(ckpt_path, map_location=device, weights_only=False)
+            except TypeError:
+                state_dict = torch.load(ckpt_path, map_location=device)
+            if isinstance(state_dict, dict):
+                if "model" in state_dict:
+                    state_dict = state_dict["model"]
+                elif "state_dict" in state_dict:
+                    state_dict = state_dict["state_dict"]
+            missing, unexpected = model.load_state_dict(state_dict, strict=False)
+            print(f"[*] Successfully loaded checkpoint weights from {ckpt_path}.")
+            if missing:
+                print(f"    Missing parameters initialized: {len(missing)}")
+            if unexpected:
+                print(f"    Unexpected parameters ignored: {len(unexpected)}")
         except Exception as e:
             print(f"[Warning] Failed loading state_dict from {ckpt_path}: {e}")
             print("Running model in evaluation mode with current weights.")

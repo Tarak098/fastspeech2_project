@@ -60,6 +60,10 @@ def train(config_path="config.yaml"):
     train_dataset = FastSpeech2Dataset(train_manifest, proc_dir)
     val_dataset = FastSpeech2Dataset(val_manifest, proc_dir)
 
+    if len(train_dataset) == 0:
+        print(f"Error: Telugu train dataset is empty (0 samples). Run preprocess.py with valid audio files first!")
+        return
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=config["train"]["batch_size"],
@@ -100,6 +104,21 @@ def train(config_path="config.yaml"):
     results_dir = config["train"]["results_dir"]
     os.makedirs(checkpoint_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)
+
+    # Check for existing checkpoint to resume / warm-start
+    best_ckpt = os.path.join(checkpoint_dir, "best_model.pth")
+    if os.path.exists(best_ckpt):
+        try:
+            try:
+                ckpt = torch.load(best_ckpt, map_location=device, weights_only=False)
+            except TypeError:
+                ckpt = torch.load(best_ckpt, map_location=device)
+            if isinstance(ckpt, dict) and "model" in ckpt:
+                ckpt = ckpt["model"]
+            model.load_state_dict(ckpt, strict=False)
+            print(f"[*] Warm-started model from existing checkpoint: {best_ckpt}")
+        except Exception as e:
+            print(f"[Notice] Starting training from scratch (could not load {best_ckpt}: {e})")
 
     train_losses = []
     val_losses = []

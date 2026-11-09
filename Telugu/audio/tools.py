@@ -112,10 +112,13 @@ def griffin_lim(log_mel, sr=22050, n_fft=1024, hop_length=256, win_length=1024, 
 
 def load_hifigan_vocoder(device="cpu"):
     """
-    Loads pretrained NVIDIA HiFi-GAN neural vocoder.
+    Loads pretrained NVIDIA HiFi-GAN neural vocoder with non-interactive trust_repo=True.
     """
     try:
-        vocoder = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_hifigan')
+        try:
+            vocoder = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_hifigan', trust_repo=True)
+        except TypeError:
+            vocoder = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_hifigan')
         vocoder = vocoder.to(device).eval()
         try:
             vocoder.remove_weight_norm()

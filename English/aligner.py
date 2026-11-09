@@ -168,3 +168,4 @@ class PhonemeAligner:
                 if durations[idx] > 1:
                     durations[idx] -= 1
         return durations
+
