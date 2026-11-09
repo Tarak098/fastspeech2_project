@@ -82,17 +82,34 @@ def auto_extract_if_needed(base_dir, lang="telugu"):
         except Exception as e:
             print(f"[Warning] Failed extracting {zpath}: {e}")
 
+import soundfile as sf
+
+def get_quick_duration(fpath):
+    try:
+        return sf.info(fpath).duration
+    except Exception:
+        try:
+            return librosa.get_duration(path=fpath)
+        except Exception:
+            return 0.0
+
 def filter_duration(file_list, target_sec):
     """Filters audio files by length (0.5s - 15s) up to target_sec total duration."""
+    print(f"[*] Subsampling {len(file_list)} Telugu candidates to target {target_sec / 3600.0:.2f} hours...")
     selected = []
     total_sec = 0.0
     for fid, fpath, txt in file_list:
         try:
-            dur = librosa.get_duration(path=fpath)
+            dur = get_quick_duration(fpath)
             if 0.5 <= dur <= 15.0:
                 selected.append((fid, fpath, txt))
                 total_sec += dur
                 if total_sec >= target_sec:
+                    break
+        except Exception:
+            continue
+    print(f"[+] Selected {len(selected)} Telugu utterances ({total_sec / 3600.0:.2f} hours, target <= {target_sec / 3600.0:.2f} hours)")
+    return selected
                     break
         except Exception:
             continue
