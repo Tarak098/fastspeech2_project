@@ -1,6 +1,6 @@
 """
 Core building blocks for FastSpeech 2: Multi-Head Attention,
-Feed-Forward Transformer (FFT) blocks, and Positional Encodings.
+Feed-Forward Transformer (FFT) blocks, and Dynamic Positional Encodings.
 """
 
 import math
@@ -9,19 +9,28 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class PositionalEncoding(nn.Module):
+    """Dynamically generated sinusoidal positional encoding supporting arbitrary sequence lengths."""
     def __init__(self, d_model, max_len=5000):
         super(PositionalEncoding, self).__init__()
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        self.d_model = d_model
+        pe = self._build_pe(max_len, d_model)
+        self.register_buffer('pe', pe)
+
+    def _build_pe(self, length, d_model):
+        position = torch.arange(0, length, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(length, d_model)
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
-        self.register_buffer('pe', pe)
+        return pe.unsqueeze(0)  # [1, length, d_model]
 
     def forward(self, x):
         # x: [B, T, d_model]
-        return x + self.pe[:, :x.size(1)]
+        seq_len = x.size(1)
+        if seq_len > self.pe.size(1):
+            new_pe = self._build_pe(seq_len + 500, self.d_model).to(x.device)
+            self.pe = new_pe
+        return x + self.pe[:, :seq_len]
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, n_heads, dropout=0.1):
@@ -37,7 +46,7 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, q, k, v, mask=None):
         batch_size = q.size(0)
-        
+
         # [B, T, H, d_k] -> [B, H, T, d_k]
         q = self.q_proj(q).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
         k = self.k_proj(k).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
@@ -45,12 +54,12 @@ class MultiHeadAttention(nn.Module):
 
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
         if mask is not None:
-            # mask: [B, 1, 1, T]
-            scores = scores.masked_fill(mask == 0, -1e9)
+            # mask: [B, 1, 1, T] or [B, 1, T_q, T_k]
+            scores = scores.masked_fill(~mask, -1e9)
 
         attn = F.softmax(scores, dim=-1)
         attn = self.dropout(attn)
-        context = torch.matmul(attn, v) # [B, H, T, d_k]
+        context = torch.matmul(attn, v)
         context = context.transpose(1, 2).contiguous().view(batch_size, -1, self.n_heads * self.d_k)
         return self.out_proj(context)
 
@@ -81,12 +90,20 @@ class FFTBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, mask=None):
-        # Self-attention with residual and norm
+        # Self-attention with residual and layer norm
         attn_out = self.slf_attn(x, x, x, mask=mask)
         x = self.layer_norm1(x + self.dropout(attn_out))
-        
-        # 1D Conv FFN with residual and norm
+
+        # 1D Conv FFN with residual and layer norm
         ffn_out = self.ffn(x)
         x = self.layer_norm2(x + self.dropout(ffn_out))
-        return x
 
+        if mask is not None:
+            # Mask out padding: mask is [B, 1, 1, T] -> squeeze to [B, T, 1]
+            if mask.dim() == 4:
+                valid_mask = mask.squeeze(1).transpose(1, 2)  # [B, T, 1]
+            else:
+                valid_mask = mask.unsqueeze(-1)
+            x = x.masked_fill(~valid_mask, 0.0)
+
+        return x

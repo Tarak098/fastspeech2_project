@@ -4,14 +4,15 @@ Accommodates native Telugu aksharas/phonemes, matras, viramas, and code-mixed ph
 """
 
 _pad = "_"
-_punctuation = "!'(),.:;? "
-_special = ["-", "sil", "sp"]
+_punctuation = list("!'(),.:;? -")
+_special = ["sil", "sp"]
 
-# Telugu Phonetic Inventory
+# Telugu Vowels & Vocalic Modifiers
 _telugu_vowels = [
     "a", "aa", "i", "ii", "u", "uu", "ru", "ruu", "e", "ee", "ai", "o", "oo", "au", "am", "ah"
 ]
 
+# Telugu Consonants
 _telugu_consonants = [
     "k", "kh", "g", "gh", "ng",
     "ch", "chh", "j", "jh", "ny",
@@ -21,13 +22,13 @@ _telugu_consonants = [
     "y", "r", "l", "v", "sh", "ss", "s", "h", "ll", "rr", "ksh"
 ]
 
-# Common English loan phonemes (for code-mixing e.g. "meeting", "November")
+# English loan phonemes common in contemporary Telugu speech
 _loan_phonemes = [
-    "f", "z", "w", "jh_eng", "ae"
+    "f", "z", "w", "ae"
 ]
 
-symbols = [_pad] + list(_punctuation) + _special + _telugu_vowels + _telugu_consonants + _loan_phonemes
+# Total vocabulary
+symbols = [_pad] + _special + _punctuation + _telugu_vowels + _telugu_consonants + _loan_phonemes
 
 symbol_to_id = {s: i for i, s in enumerate(symbols)}
 id_to_symbol = {i: s for i, s in enumerate(symbols)}
-

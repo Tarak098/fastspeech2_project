@@ -1,6 +1,6 @@
 """
 Core building blocks for FastSpeech 2: Multi-Head Attention,
-Feed-Forward Transformer (FFT) blocks, and Positional Encodings.
+Feed-Forward Transformer (FFT) blocks, and Dynamic Positional Encodings (Telugu).
 """
 
 import math
@@ -9,25 +9,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=20000):
+    """Dynamically generated sinusoidal positional encoding supporting arbitrary sequence lengths."""
+    def __init__(self, d_model, max_len=5000):
         super(PositionalEncoding, self).__init__()
-        pe = torch.zeros(max_len, d_model)
-        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
+        self.d_model = d_model
+        pe = self._build_pe(max_len, d_model)
         self.register_buffer('pe', pe)
 
+    def _build_pe(self, length, d_model):
+        position = torch.arange(0, length, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(length, d_model)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        return pe.unsqueeze(0)
+
     def forward(self, x):
-        if x.size(1) > self.pe.size(1):
-            pe = torch.zeros(x.size(1), x.size(2), device=x.device)
-            position = torch.arange(0, x.size(1), dtype=torch.float, device=x.device).unsqueeze(1)
-            div_term = torch.exp(torch.arange(0, x.size(2), 2, device=x.device).float() * (-math.log(10000.0) / x.size(2)))
-            pe[:, 0::2] = torch.sin(position * div_term)
-            pe[:, 1::2] = torch.cos(position * div_term)
-            return x + pe.unsqueeze(0)
-        return x + self.pe[:, :x.size(1)]
+        seq_len = x.size(1)
+        if seq_len > self.pe.size(1):
+            new_pe = self._build_pe(seq_len + 500, self.d_model).to(x.device)
+            self.pe = new_pe
+        return x + self.pe[:, :seq_len]
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, n_heads, dropout=0.1):
@@ -43,13 +45,14 @@ class MultiHeadAttention(nn.Module):
 
     def forward(self, q, k, v, mask=None):
         batch_size = q.size(0)
+
         q = self.q_proj(q).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
         k = self.k_proj(k).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
         v = self.v_proj(v).view(batch_size, -1, self.n_heads, self.d_k).transpose(1, 2)
 
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e9)
+            scores = scores.masked_fill(~mask, -1e9)
 
         attn = F.softmax(scores, dim=-1)
         attn = self.dropout(attn)
@@ -58,6 +61,7 @@ class MultiHeadAttention(nn.Module):
         return self.out_proj(context)
 
 class ConvFFN(nn.Module):
+    """Feed-Forward Network with 1D Convolutions as in FastSpeech 2."""
     def __init__(self, d_model, d_inner, kernel_size=(9, 1), dropout=0.1):
         super(ConvFFN, self).__init__()
         self.conv1 = nn.Conv1d(d_model, d_inner, kernel_size=kernel_size[0], padding=(kernel_size[0] - 1) // 2)
@@ -72,6 +76,7 @@ class ConvFFN(nn.Module):
         return out.transpose(1, 2)
 
 class FFTBlock(nn.Module):
+    """Feed-Forward Transformer Block."""
     def __init__(self, d_model, n_heads, d_inner, kernel_size=(9, 1), dropout=0.1):
         super(FFTBlock, self).__init__()
         self.slf_attn = MultiHeadAttention(d_model, n_heads, dropout=dropout)
@@ -83,7 +88,15 @@ class FFTBlock(nn.Module):
     def forward(self, x, mask=None):
         attn_out = self.slf_attn(x, x, x, mask=mask)
         x = self.layer_norm1(x + self.dropout(attn_out))
+
         ffn_out = self.ffn(x)
         x = self.layer_norm2(x + self.dropout(ffn_out))
-        return x
 
+        if mask is not None:
+            if mask.dim() == 4:
+                valid_mask = mask.squeeze(1).transpose(1, 2)
+            else:
+                valid_mask = mask.unsqueeze(-1)
+            x = x.masked_fill(~valid_mask, 0.0)
+
+        return x

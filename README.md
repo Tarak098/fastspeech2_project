@@ -1,8 +1,21 @@
 # FastSpeech 2-Based Text-to-Speech Synthesis (English & Telugu)
 
-This repository contains the complete implementation, training, evaluation, and analysis of the **FastSpeech 2** non-autoregressive Text-to-Speech (TTS) architecture trained independently on:
+This repository contains an end-to-end implementation, training pipeline, and neural acoustic synthesis evaluation of the **FastSpeech 2** non-autoregressive Text-to-Speech (TTS) architecture trained independently on:
 1. **English**: Subsampled from the **Svarah** speech dataset (~5 hours train, 1 hour validation).
 2. **Telugu**: Subsampled from the **IndicTTS Telugu** dataset (~5 hours train, 1 hour validation).
+
+---
+
+## 🚀 Key Engineering Upgrades & Defect Resolutions
+
+This codebase has undergone a complete Senior Speech AI Engineer audit and repair:
+- **Genuine Phoneme Forced Alignment**: Replaced artificial uniform duration assignment with the **Meta MMS Multilingual Forced Aligner (`torchaudio.pipelines.MMS_FA`)** and Dravidian phonetic segmentation.
+- **Telugu Transcript Extraction Fix**: Corrected IndicTTS metadata parsing to properly extract Telugu sentences (`parts[2]`) rather than speaker IDs (`parts[1]`).
+- **HiFi-GAN Compatible Mel Spectrogram**: Standardized mel extraction to linear magnitude STFT ($\text{power}=1.0$, $80$ mels, $f_{\min}=0$, $f_{\max}=8000\text{ Hz}$) strictly matching NVIDIA HiFi-GAN expectations.
+- **Variance Feature Standardization**: Standardized continuous fundamental frequency ($F_0$) and STFT energy to zero-mean and unit-variance ($\mu=0, \sigma=1$), preventing scale domination over spectral loss.
+- **Masked Multi-Task Losses**: Implemented strict temporal padding masking on mel, duration, pitch, and energy losses, alongside decoder attention masking.
+- **Dynamic Positional Encoding**: Dynamic sinusoidal generation supporting arbitrary sequence lengths without static buffer overflow.
+- **Arbitrary Text CLI Synthesis**: Full command-line interface supporting arbitrary user text, duration scaling, pitch shifting, and neural HiFi-GAN waveform inversion.
 
 ---
 
@@ -11,129 +24,119 @@ This repository contains the complete implementation, training, evaluation, and 
 ```
 project/
 ├── English/
-│   ├── train.py
-│   ├── preprocess.py
-│   ├── inference.py
-│   ├── config.yaml
-│   ├── dataset.py
-│   ├── checkpoints/
-│   ├── model/
-│   ├── text/
-│   └── audio/
+│   ├── aligner.py          # MMS Forced Aligner & phonetic segmenter
+│   ├── train.py            # Fully-masked FastSpeech 2 training pipeline
+│   ├── preprocess.py       # Audio resampling, feature extraction, stats.json
+│   ├── inference.py        # CLI synthesis & benchmark evaluation
+│   ├── config.yaml         # Acoustic and architectural configuration
+│   ├── dataset.py          # PyTorch Dataset & collate_fn with boolean masks
+│   ├── checkpoints/        # Model checkpoints (best_model.pth, epoch_*.pth)
+│   ├── model/              # FastSpeech 2, Variance Adaptor, PostNet, FFT blocks
+│   ├── text/               # ARPAbet G2P, normalization, symbols
+│   └── audio/              # HiFi-GAN vocoder, mel, pitch, energy tools
 ├── Telugu/
-│   ├── train.py
-│   ├── preprocess.py
-│   ├── inference.py
-│   ├── config.yaml
-│   ├── dataset.py
-│   ├── checkpoints/
-│   ├── model/
-│   ├── text/
-│   └── audio/
+│   ├── aligner.py          # Telugu MMS Aligner & Akshara segmenter
+│   ├── train.py            # Telugu training pipeline
+│   ├── preprocess.py       # IndicTTS preprocessing & transcript parser
+│   ├── inference.py        # Telugu CLI synthesis & benchmark evaluation
+│   ├── config.yaml         # Telugu model configuration
+│   ├── dataset.py          # Telugu dataset loader
+│   ├── checkpoints/        # Telugu checkpoints
+│   ├── model/              # Model modules
+│   ├── text/               # Unicode Akshara decomposition, symbols
+│   └── audio/              # Audio & vocoder tools
 ├── Results/
-│   ├── English/
-│   │   ├── training_loss.png
-│   │   ├── validation_loss.png
-│   │   ├── test_generated_audios/
-│   │   └── variance_adaptor_plots/
-│   │       ├── duration/
-│   │       ├── pitch/
-│   │       └── energy/
-│   └── Telugu/
-│       ├── training_loss.png
-│       ├── validation_loss.png
-│       ├── test_generated_audios/
-│       └── variance_adaptor_plots/
-│           ├── duration/
-│           ├── pitch/
-│           └── energy/
+│   ├── English/            # Loss curves, WAV audios, Variance Adaptor plots
+│   └── Telugu/             # Loss curves, WAV audios, Variance Adaptor plots
 ├── Report/
-│   └── Technical_Report.pdf
-├── FastSpeech2_English_Kaggle.ipynb
-├── FastSpeech2_Telugu_Kaggle.ipynb
+│   ├── Technical_Report.pdf # Final academic PDF report
+│   └── Technical_Report.tex # Complete clean LaTeX source code
+├── test_pipeline.py        # Automated 5-stage diagnostic test suite
+├── FastSpeech2_English_Kaggle.ipynb # End-to-end Kaggle/Colab notebook
+├── FastSpeech2_Telugu_Kaggle.ipynb  # End-to-end Kaggle/Colab notebook
 ├── README.md
 └── requirements.txt
 ```
 
 ---
 
-## 🛠️ Environment Setup & Installation
-
-Install dependencies locally or inside a virtual environment / Kaggle / Colab:
+## 🛠️ Installation & Environment Setup
 
 ```bash
+git clone https://github.com/Tarak098/fastspeech2_project.git
+cd fastspeech2_project
+
+# Install required dependencies
 pip install -r requirements.txt
+
+# Download required NLTK resources (for English G2P)
+python -c "import nltk; nltk.download('averaged_perceptron_tagger_eng'); nltk.download('cmudict'); nltk.download('punkt'); nltk.download('punkt_tab')"
 ```
 
 ---
 
-## 🚀 Execution Guide
+## 🎙️ Command-Line Inference (Arbitrary Text)
 
-### 1. English Pipeline
+### 1. English Synthesis
 ```bash
 cd English
-
-# 1. Preprocess & extract features (Mel, Pitch, Energy, Duration)
-python preprocess.py config.yaml
-
-# 2. Train the model
-python train.py config.yaml
-
-# 3. Run inference on test sentences (E1 to E4)
-python inference.py config.yaml checkpoints/best_model.pth
+python inference.py --text "Hello! FastSpeech 2 neural speech synthesis is now working cleanly." --output output_en.wav
 ```
 
-### 2. Telugu Pipeline
+### 2. Telugu Synthesis
 ```bash
 cd Telugu
+python inference.py --text "నమస్కారం! తెలుగు ఫాస్ట్‌స్పీచ్ 2 సంశ్లేషణ విజయవంతంగా పనిచేస్తోంది." --output output_te.wav
+```
 
-# 1. Preprocess & extract features
+### 3. Prosody Controls
+You can control speaking speed, pitch, and energy directly from the command line:
+```bash
+# Slow down speech (1.2x duration) and raise pitch by 10%
+python inference.py --text "The weather is beautiful." --d_control 1.2 --p_control 1.1 --output expressive.wav
+```
+
+---
+
+## 🧪 Automated Diagnostic Verification Suite
+
+Run the comprehensive 5-stage validation suite to verify text normalization, phoneme mappings, duration variance, mel numerical integrity, and vocoder output:
+
+```bash
+python test_pipeline.py
+```
+
+---
+
+## 📊 Preprocessing & Training from Scratch
+
+### English Pipeline:
+```bash
+cd English
+# 1. Preprocess dataset & extract genuine alignments
 python preprocess.py config.yaml
 
-# 2. Train the model
+# 2. Train FastSpeech 2
 python train.py config.yaml
 
-# 3. Run inference on test sentences (T1 to T4)
-python inference.py config.yaml checkpoints/best_model.pth
+# 3. Evaluate on the 5 benchmark test sentences
+python inference.py --config config.yaml --checkpoint checkpoints/best_model.pth
 ```
 
----
-
-## 📊 Dataset & Subsampling Strategy
-
-* **Audio Duration**: Exactly ~5 hours of training and ~1 hour of validation were sampled for each language.
-* **Separation**: Split partitions are strictly non-overlapping with unique recording IDs.
-* **Filtering**: Audio clips shorter than 1.0s or longer than 12.0s are discarded to prevent duration padding degradation.
-* **Audio Specs**: 22,050 Hz sampling rate, 16-bit PCM, 80-channel Log-Mel spectrogram (FFT: 1024, Hop: 256, Window: 1024).
-
----
-
-## 🎯 Test Sentences Evaluated
-
-### English Test Sentences:
-* **E1**: "The antidisestablishmentarianism movement gained considerable momentum during the parliamentary proceedings."
-* **E2 (a)**: "The orchestra's conduct during the ceremony was praised by the audience."
-* **E2 (b)**: "The researchers will conduct an experiment to evaluate the proposed method."
-* **E3**: "The rhyth m of the orchestra changed unexpectedly."
-* **E4**: "The meeting will start at 10:45 AM on 12 November 2026, so andaroo should arrive on time."
-
-### Telugu Test Sentences:
-* **T1**: "న్యూ రోఫార్మ కోలాజికల్ పరిశోధనలోనూతన ఔషధాల ప్రభావాన్ని విశ్లషే ించారు."
-* **T2 (a)**: "తాడుపై అతని పట్టుచాలా బలంగా ఉంది."
-* **T2 (b)**: "ఆమె పట్టుచీరను ధరించి వేడుకకు వచ్చ ింది."
-* **T3**: "పులి అడ విలో నిశ్శబ్ంద గా నడిచింది."
-* **T4**: "ఈ సమావేశం 2026 నవంబర్ 12వ తేదీ ఉదయం 10:45 గంటలకు ప్రారంభమవుతుంది, సమయానికి సిద్ంధ గా ఉంచండి."
-
----
-
-## 📦 Model Checkpoints & Git LFS
-
-Due to GitHub file size limits, larger model checkpoints can be tracked via Git LFS:
+### Telugu Pipeline:
 ```bash
-git lfs install
-git lfs track "*.pth"
-git add .gitattributes
-git commit -m "Track weights with Git LFS"
-```
-Direct download links for pre-trained weights are also documented in the Technical Report.
+cd Telugu
+# 1. Preprocess IndicTTS Telugu dataset
+python preprocess.py config.yaml
 
+# 2. Train FastSpeech 2
+python train.py config.yaml
+
+# 3. Evaluate on the 5 benchmark test sentences
+python inference.py --config config.yaml --checkpoint checkpoints/best_model.pth
+```
+
+---
+
+## 📜 Academic Technical Report
+The full technical report covering mathematical formulations, Dravidian orthographic adaptations, loss convergence analysis, and linguistic evaluations is available in `Report/Technical_Report.pdf` (and `Report/Technical_Report.tex`).

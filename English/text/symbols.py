@@ -1,27 +1,30 @@
 """
 Defines the vocabulary of phonemes and symbols for English FastSpeech 2.
+Includes ARPAbet phonemes with stress variants (0, 1, 2) and prosodic pause markers.
 """
 
 _pad = "_"
-_punctuation = "!'(),.:;? "
-_special = "-"
-_letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+_punctuation = list("!'(),.:;? -")
+_special = ["sil", "sp"]
 
-# ARPAbet phonemes
-_arpabet = [
-    "AA", "AA0", "AA1", "AA2", "AE", "AE0", "AE1", "AE2", "AH", "AH0", "AH1", "AH2",
-    "AO", "AO0", "AO1", "AO2", "AW", "AW0", "AW1", "AW2", "AY", "AY0", "AY1", "AY2",
-    "B", "CH", "D", "DH", "EH", "EH0", "EH1", "EH2", "ER", "ER0", "ER1", "ER2",
-    "EY", "EY0", "EY1", "EY2", "F", "G", "HH", "IH", "IH0", "IH1", "IH2",
-    "IY", "IY0", "IY1", "IY2", "JH", "K", "L", "M", "N", "NG", "OW", "OW0", "OW1", "OW2",
-    "OY", "OY0", "OY1", "OY2", "P", "R", "S", "SH", "T", "TH", "UH", "UH0", "UH1", "UH2",
-    "UW", "UW0", "UW1", "UW2", "V", "W", "Y", "Z", "ZH", "sp", "sil"
+# ARPAbet phoneme inventory with stress markings
+_arpabet_bases = [
+    "AA", "AE", "AH", "AO", "AW", "AY", "B", "CH", "D", "DH",
+    "EH", "ER", "EY", "F", "G", "HH", "IH", "IY", "JH", "K",
+    "L", "M", "N", "NG", "OW", "OY", "P", "R", "S", "SH",
+    "T", "TH", "UH", "UW", "V", "W", "Y", "Z", "ZH"
 ]
 
-# Export all symbols
-symbols = [_pad] + list(_punctuation) + list(_special) + _arpabet
+_arpabet = []
+for p in _arpabet_bases:
+    _arpabet.append(p)
+    # Add lexical stress variants for vowels/diphthongs
+    if p in ["AA", "AE", "AH", "AO", "AW", "AY", "EH", "ER", "EY", "IH", "IY", "OW", "OY", "UH", "UW"]:
+        _arpabet.extend([f"{p}0", f"{p}1", f"{p}2"])
+
+# Total vocabulary
+symbols = [_pad] + _special + _punctuation + _arpabet
 
 # Mappings
 symbol_to_id = {s: i for i, s in enumerate(symbols)}
 id_to_symbol = {i: s for i, s in enumerate(symbols)}
-
